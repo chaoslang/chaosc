@@ -61,7 +61,7 @@ typedef struct Chaos_AST {
 
   struct {
     Chaos_AST *cond;
-    Chaos_AST *then;
+    Chaos_AST *body;
   } while_stmt;
 
   struct {
@@ -92,6 +92,7 @@ typedef struct Chaos_AST {
         binary{TOK_INT, nullptr, nullptr}, unary{TOK_INT, nullptr}, block(),
         if_stmt{nullptr, nullptr, nullptr}, while_stmt{nullptr, nullptr},
         function{std::string_view{}, {}, std::string_view{}, nullptr},
+        call{nullptr, {}},
         var_decl{std::string_view{}, std::string_view{}, nullptr},
         assign{nullptr, nullptr}
 
@@ -199,6 +200,7 @@ Chaos_AST *parse_var_decl(Chaos_Parser *p) {
 }
 
 Chaos_AST *parse_postfix(Chaos_Parser *p, Chaos_AST *left) {
+  if (!left) return nullptr;
   while (p->peek()->kind == TOK_LPAREN) {
     p->advance();
     Chaos_AST *call_node = new Chaos_AST();
@@ -429,7 +431,7 @@ Chaos_AST *parse_while(Chaos_Parser *p) {
   Chaos_AST *node = new Chaos_AST();
   node->kind = AST_WHILE;
   node->while_stmt.cond = cond;
-  node->while_stmt.then = body;
+  node->while_stmt.body = body;
   return node;
 }
 
