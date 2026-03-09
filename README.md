@@ -2,5 +2,5 @@ QuickStart:
 
 ```console
   clang++ -o chaosc chaosc.cpp
-  ./chaosc
+  ./chaosc <source.ch> <output>
 ```
