@@ -5,7 +5,9 @@ fn add(x: int, y: int): int {
 
 fn main(): int {
   add(5, 3);
-  var o: float = 3;
+
+  var o: int = 3;
+  
   while (o < 10){
     o = o + 1;
     print(o);
