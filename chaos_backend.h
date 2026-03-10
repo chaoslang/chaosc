@@ -1,4 +1,5 @@
 #import "./chaos_semantic.h"
+#include <cstddef>
 #include <iostream>
 
 struct Lowering_Context {
@@ -184,6 +185,7 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     ctx.fn->code.push_back(inst);
     return t;
   }
+  return 0;
 }
 
 void lower_stmt(Chaos_AST *node, Lowering_Context &ctx) {
