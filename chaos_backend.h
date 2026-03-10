@@ -73,7 +73,7 @@ IR_Type lower_type_name(std::string_view name) {
 
 IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
   if (node->kind == AST_INT) {
-    IR_Value t = ctx.fn->new_temp();
+    IR_Value t = ctx.fn->new_temp({IR_I32});
 
     IR_Inst inst{};
     inst.op = IR_CONST_INT;
@@ -94,27 +94,33 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     if (node->call.caller->kind == AST_IDENT) {
       fn_name = std::string(node->call.caller->ident);
     } else {
-      return ctx.fn->new_temp();
+      return ctx.fn->new_temp({IR_I32});
     }
     IR_Inst inst{};
     inst.args = arg_values;
 
     if (fn_name == "print") {
+      std::vector<IR_Value> arg_values;
+      std::vector<IR_Type> arg_types;
+      for (Chaos_AST *arg : node->call.args) {
+        IR_Value val = lower_expr(arg, ctx);
+        arg_values.push_back(val);
+        arg_types.push_back(get_expr_type(arg));
+      }
+
+      IR_Value t = ctx.fn->new_temp({IR_I32});
+      IR_Inst inst{};
       inst.op = IR_INTRINSIC_PRINT;
-      inst.type = {IR_VOID};
+      inst.args = arg_values;
+      inst.arg_types = arg_types;
+      inst.dst = t;
+      inst.type = {IR_I32};
       ctx.fn->code.push_back(inst);
 
-      IR_Value t = ctx.fn->new_temp();
-      IR_Inst zero{};
-      zero.op = IR_CONST_INT;
-      zero.dst = t;
-      zero.int_value = 0;
-      zero.type = {IR_I32};
-      ctx.fn->code.push_back(zero);
       return t;
     }
 
-    IR_Value t = ctx.fn->new_temp();
+    IR_Value t = ctx.fn->new_temp({IR_I32});
     inst.op = IR_CALL;
     inst.dst = t;
     inst.name = fn_name;
@@ -125,7 +131,7 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     return t;
   }
   if (node->kind == AST_IDENT) {
-    IR_Value t = ctx.fn->new_temp();
+    IR_Value t = ctx.fn->new_temp({IR_I32});
 
     IR_Inst inst{};
     inst.op = IR_LOAD;
@@ -141,7 +147,7 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     IR_Value left = lower_expr(node->binary.l, ctx);
     IR_Value right = lower_expr(node->binary.r, ctx);
 
-    IR_Value t = ctx.fn->new_temp();
+    IR_Value t = ctx.fn->new_temp({IR_I32});
 
     IR_Inst inst{};
     inst.dst = t;

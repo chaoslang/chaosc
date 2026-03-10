@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 
+#include "./chaos_backend_c.h"
 #include "./chaos_backend_js.h"
 
 std::string read_file(const std::string &path) {
@@ -22,8 +23,8 @@ std::string read_file(const std::string &path) {
 }
 
 int main(int argc, char **argv) {
-  if (argc != 3){
-    std::fprintf(stderr, "Usage: %s <source.ch> <output>\n", argv[0]);
+  if (argc != 4) {
+    std::fprintf(stderr, "Usage: %s <source.ch> <output> <backend>\n", argv[0]);
     return 1;
   }
 
@@ -45,13 +46,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  std::string out = "";
   IR_Program ir = lower_program(ast);
 
-  JavaScriptBackend js_backend;
-  js_backend.codegen(ir);
-
-  std::string out = "";
-  out = js_backend.get_output() + "\n";
+  if (std::string(argv[3]) == "js") {
+    JavaScriptBackend js_backend;
+    js_backend.codegen(ir);
+    out = js_backend.get_output() + "\n";
+  } else if (std::string(argv[3]) == "c") {
+    CBackend c_backend;
+    c_backend.codegen(ir);
+    out = c_backend.get_output() + "\n";
+  }
   std::ofstream output(argv[2]);
   output << out;
   return 0;

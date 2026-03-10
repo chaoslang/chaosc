@@ -266,7 +266,8 @@ struct IR_Inst {
 
   std::string name;
   std::vector<IR_Value> args;
-  
+  std::vector<IR_Type> arg_types;
+
   int64_t int_value;
   double float_value;
 };
@@ -285,10 +286,14 @@ struct IR_Function {
   IR_Type return_type;
 
   std::vector<IR_Inst> code;
+  std::vector<IR_Type> temp_types;
 
   int next_temp = 0;
 
-  IR_Value new_temp() { return next_temp++; }
+  IR_Value new_temp(IR_Type type) {
+    temp_types.push_back(type);
+    return next_temp++;
+  }
 };
 
 struct IR_Program {
