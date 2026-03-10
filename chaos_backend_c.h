@@ -101,13 +101,13 @@ private:
   void emit_inst(const IR_Inst &inst) {
     switch (inst.op) {
     case IR_CONST_INT:
-      output << indent() << "int " << get_temp_name(inst.dst) << " = "
-             << inst.int_value << ";\n";
+      output << indent() << lower_type_c(inst.type) << " "
+             << get_temp_name(inst.dst) << " = " << inst.int_value << ";\n";
       break;
 
     case IR_CONST_FLOAT:
-      output << indent() << "float " << get_temp_name(inst.dst) << " = "
-             << inst.float_value << ";\n";
+      output << indent() << lower_type_c(inst.type) << " "
+             << get_temp_name(inst.dst) << " = " << inst.float_value << ";\n";
       break;
 
     case IR_ADD:
@@ -254,7 +254,7 @@ public:
       indent_level++;
 
       for (const auto &local : fn.locals)
-        output << indent() << lower_type_c(fn.return_type) << ' ' << local.name
+        output << indent() << lower_type_c(local.type) << ' ' << local.name
                << ";\n";
       emit_instructions_with_control_flow(fn.code);
 

@@ -7,7 +7,7 @@ fn main(): int {
   add(5, 3);
 
   var o: int = 3;
-  var t: int = 1;
+  var t: float = 1.021;
   
   while (o < 10){
     o = o + 1;

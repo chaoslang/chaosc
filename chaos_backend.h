@@ -1,9 +1,11 @@
 #import "./chaos_semantic.h"
 #include <cstddef>
 #include <iostream>
+#include <unordered_map>
 
 struct Lowering_Context {
   IR_Function *fn;
+  std::unordered_map<std::string, IR_Type> value_types;
 
   int label_counter = 0;
 
@@ -53,6 +55,14 @@ IR_Type get_expr_type(Chaos_AST *node) {
   return {IR_I32};
 }
 
+IR_Type promote_numeric_type(IR_Type a, IR_Type b) {
+  if (a.kind == IR_F64 || b.kind == IR_F64)
+    return {IR_F64};
+  if (a.kind == IR_F32 || b.kind == IR_F32)
+    return {IR_F32};
+  return {IR_I32};
+}
+
 IR_Type lower_type_name(std::string_view name) {
   if (name == "int" || name == "i32")
     return {IR_I32};
@@ -85,6 +95,18 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
 
     return t;
   }
+  if (node->kind == AST_FLOAT) {
+    IR_Value t = ctx.fn->new_temp({IR_F64});
+
+    IR_Inst inst{};
+    inst.op = IR_CONST_FLOAT;
+    inst.dst = t;
+    inst.int_value = std::stod(std::string(node->literal));
+    inst.type = {IR_I32};
+    ctx.fn->code.push_back(inst);
+
+    return t;
+  }
   if (node->kind == AST_CALL) {
     std::vector<IR_Value> arg_values;
     for (Chaos_AST *arg : node->call.args) {
@@ -101,12 +123,10 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     inst.args = arg_values;
 
     if (fn_name == "print") {
-      std::vector<IR_Value> arg_values;
       std::vector<IR_Type> arg_types;
-      for (Chaos_AST *arg : node->call.args) {
-        IR_Value val = lower_expr(arg, ctx);
-        arg_values.push_back(val);
-        arg_types.push_back(get_expr_type(arg));
+
+      for (IR_Value val : arg_values) {
+        arg_types.push_back(ctx.fn->temp_types[val]);
       }
 
       IR_Value t = ctx.fn->new_temp({IR_I32});
@@ -132,13 +152,19 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     return t;
   }
   if (node->kind == AST_IDENT) {
-    IR_Value t = ctx.fn->new_temp({IR_I32});
+    IR_Type value_type = {IR_I32};
+    auto it = ctx.value_types.find(std::string(node->ident));
+    if (it != ctx.value_types.end()) {
+      value_type = it->second;
+    }
+
+    IR_Value t = ctx.fn->new_temp(value_type);
 
     IR_Inst inst{};
     inst.op = IR_LOAD;
     inst.dst = t;
     inst.name = node->ident;
-    inst.type = get_expr_type(node);
+    inst.type = value_type;
 
     ctx.fn->code.push_back(inst);
 
@@ -148,13 +174,20 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     IR_Value left = lower_expr(node->binary.l, ctx);
     IR_Value right = lower_expr(node->binary.r, ctx);
 
-    IR_Value t = ctx.fn->new_temp({IR_I32});
+    IR_Type left_type = ctx.fn->temp_types[left];
+    IR_Type right_type = ctx.fn->temp_types[right];
+    IR_Type result_type = promote_numeric_type(left_type, right_type);
+    if (node->binary.op == TOK_LT || node->binary.op == TOK_GT ||
+        node->binary.op == TOK_EQEQ) {
+      result_type = {IR_BOOL};
+    }
+    IR_Value t = ctx.fn->new_temp(result_type);
 
     IR_Inst inst{};
     inst.dst = t;
     inst.a = left;
     inst.b = right;
-    inst.type = get_expr_type(node);
+    inst.type = result_type;
 
     switch (node->binary.op) {
     case TOK_PLUS:
@@ -264,6 +297,7 @@ void lower_stmt(Chaos_AST *node, Lowering_Context &ctx) {
     local.name = std::string(node->var_decl.name);
     local.type = lower_type_name(node->var_decl.type);
     ctx.fn->locals.push_back(local);
+    ctx.value_types[local.name] = local.type;
 
     if (node->var_decl.init) {
       IR_Value val = lower_expr(node->var_decl.init, ctx);
@@ -303,6 +337,10 @@ IR_Function lower_function(Chaos_AST *fn_node) {
 
   Lowering_Context ctx;
   ctx.fn = &fn;
+
+  for (const auto &param : fn.params) {
+    ctx.value_types[param.name] = param.type;
+  }
 
   lower_stmt(fn_node->function.body, ctx);
 
