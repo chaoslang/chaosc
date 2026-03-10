@@ -1,4 +1,5 @@
 #import "./chaos_semantic.h"
+#include "chaos_parser.h"
 #include <cstddef>
 #include <iostream>
 #include <unordered_map>
@@ -51,6 +52,8 @@ IR_Type get_expr_type(Chaos_AST *node) {
       return {IR_F64};
     if (node->kind == AST_IDENT)
       return {IR_I32};
+    if (node->kind == AST_STRING)
+      return {IR_STR};
   }
   return {IR_I32};
 }
@@ -76,6 +79,8 @@ IR_Type lower_type_name(std::string_view name) {
     return {IR_BOOL};
   if (name == "void")
     return {IR_VOID};
+  if (name == "string")
+    return {IR_STR};
 
   std::cout << name << std::endl;
   assert(false && "Unknown type name");
@@ -91,6 +96,18 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     inst.dst = t;
     inst.int_value = std::stoll(std::string(node->literal));
     inst.type = {IR_I32};
+    ctx.fn->code.push_back(inst);
+
+    return t;
+  }
+  if (node->kind == AST_STRING){
+        IR_Value t = ctx.fn->new_temp({IR_STR});
+
+    IR_Inst inst{};
+    inst.op = IR_CONST_STRING;
+    inst.dst = t;
+    inst.string_value = std::string(node->literal);
+    inst.type = {IR_STR};
     ctx.fn->code.push_back(inst);
 
     return t;

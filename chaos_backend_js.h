@@ -37,7 +37,11 @@ private:
              << get_temp_name(inst.a) << " + " << get_temp_name(inst.b)
              << ";\n";
       break;
-
+    case IR_CONST_STRING:
+      output << indent() << "let " << get_temp_name(inst.dst)
+             << " = { len: " << inst.string_value.size() << ", data: " << '"'
+             << inst.string_value << '"' << " };\n";
+      break;
     case IR_SUB:
       output << indent() << "let " << get_temp_name(inst.dst) << " = "
              << get_temp_name(inst.a) << " - " << get_temp_name(inst.b)
@@ -89,14 +93,17 @@ private:
     case IR_INTRINSIC_PRINT: {
       output << indent() << "console.log(";
       for (size_t i = 0; i < inst.args.size(); i++) {
-        output << get_temp_name(inst.args[i]);
+        if (inst.arg_types[i].kind == IR_STR) {
+          output << get_temp_name(inst.args[i]) << ".data";
+        } else {
+          output << get_temp_name(inst.args[i]);
+        }
         if (i + 1 < inst.args.size())
           output << ", ";
       }
       output << ");\n";
       break;
     }
-
     case IR_RET:
       output << indent() << "return " << get_temp_name(inst.a) << ";\n";
       break;

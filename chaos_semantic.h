@@ -219,6 +219,7 @@ enum IR_Type_Kind {
   IR_F64,
   IR_BOOL,
   IR_PTR,
+  IR_STR,
   IR_VOID
 };
 
@@ -231,6 +232,7 @@ enum IR_Op {
 
   IR_CONST_INT,
   IR_CONST_FLOAT,
+  IR_CONST_STRING,
 
   IR_LOAD,
   IR_STORE,
@@ -270,6 +272,7 @@ struct IR_Inst {
 
   int64_t int_value;
   double float_value;
+  std::string string_value;
 };
 
 struct IR_Local {

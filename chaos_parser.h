@@ -139,6 +139,12 @@ Chaos_AST *parse_primary(Chaos_Parser *p) {
     node->literal = tok->text;
     return node;
   }
+  if (p->match(TOK_STRING)) {
+    Chaos_AST *node = new Chaos_AST();
+    node->kind = AST_STRING;
+    node->literal = tok->text;
+    return node;
+  }
 
   if (p->match(TOK_IDENT)) {
     Chaos_AST *node = new Chaos_AST();
@@ -200,7 +206,8 @@ Chaos_AST *parse_var_decl(Chaos_Parser *p) {
 }
 
 Chaos_AST *parse_postfix(Chaos_Parser *p, Chaos_AST *left) {
-  if (!left) return nullptr;
+  if (!left)
+    return nullptr;
   while (p->peek()->kind == TOK_LPAREN) {
     p->advance();
     Chaos_AST *call_node = new Chaos_AST();

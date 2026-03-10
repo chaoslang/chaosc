@@ -4,7 +4,35 @@
 #include <sstream>
 #include <unordered_map>
 
-std::string lower_type_c(IR_Type type) {
+static std::string escape_c_string(const std::string &s) {
+  std::string out;
+  out.reserve(s.size());
+  for (unsigned char c : s) {
+    switch (c) {
+    case '\\':
+      out += "\\\\";
+      break;
+    case '"':
+      out += "\\\"";
+      break;
+    case '\n':
+      out += "\\n";
+      break;
+    case '\r':
+      out += "\\r";
+      break;
+    case '\t':
+      out += "\\t";
+      break;
+    default:
+      out += static_cast<char>(c);
+      break;
+    }
+  }
+  return out;
+}
+
+static std::string lower_type_c(IR_Type type) {
   switch (type.kind) {
   case IR_I32:
     return "int";
@@ -51,7 +79,7 @@ std::string lower_type_c(IR_Type type) {
   };
 }
 
-std::string printf_fmt(IR_Type type) {
+static std::string printf_fmt(IR_Type type) {
   switch (type.kind) {
   case IR_I32:
     return "%d";
@@ -75,6 +103,8 @@ std::string printf_fmt(IR_Type type) {
     return "%zu";
   case IR_PTR:
     return "%p";
+  case IR_STR:
+    return "ChaosString";
   default:
     std::cout << "type unsupported: " << lower_type_c(type) << std::endl;
     assert(false && "Unsupported printf type");
@@ -169,19 +199,27 @@ private:
       output << ");\n";
       break;
     }
+    case IR_CONST_STRING:
+      output << indent() << "ChaosString " << get_temp_name(inst.dst) << " = {"
+             << inst.string_value.size() << ", \""
+             << escape_c_string(inst.string_value) << "\"};\n";
+      break;
     case IR_INTRINSIC_PRINT: {
-      std::string fmt;
-      for (auto t : inst.arg_types) {
-        fmt += printf_fmt(t);
-        fmt += ' ';
+      for (size_t i = 0; i < inst.args.size(); i++) {
+        auto t = inst.arg_types[i];
+        auto arg = inst.args[i];
+        if (t.kind == IR_STR) {
+          output << indent() << "printf(\"%.*s\", (int)" << get_temp_name(arg)
+                 << ".len, " << get_temp_name(arg) << ".data);\n";
+        } else {
+          output << indent() << "printf(\"" << printf_fmt(t) << "\", "
+                 << get_temp_name(arg) << ");\n";
+        }
+        if (i + 1 < inst.args.size()) {
+          output << indent() << "printf(\" \" );\n";
+        }
       }
-      fmt += "\\n";
-
-      output << indent() << "printf(\"" << fmt << "\"";
-      for (auto arg : inst.args) {
-        output << ", " << get_temp_name(arg);
-      }
-      output << ");\n";
+      output << indent() << "printf(\"\\n\");\n";
       break;
     }
     case IR_RET:
@@ -240,6 +278,8 @@ public:
     output << indent() << "#include <stdio.h>\n";
     output << indent() << "#include <stdint.h>\n";
     output << indent() << "#include <stdbool.h>\n";
+    output << indent() << "#include <stddef.h>\n";
+    output << indent() << "typedef struct { size_t len; const char *data; } ChaosString;\n";
 
     for (const auto &fn : ir.functions) {
       output << lower_type_c(fn.return_type) << ' ' << fn.name << "(";
