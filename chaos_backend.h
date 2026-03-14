@@ -299,8 +299,6 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     inst.name = fn_name;
     inst.type = call_type;
 
-    inst.type = node->resolved_type ? lower_type(*node->resolved_type)
-                                    : IR_Type{IR_I32};
     ctx.fn->code.push_back(inst);
     return t;
   }

@@ -23,6 +23,8 @@ fn main(): int {
   v.y = 2.0;
   v.z = 3.0;
 
+  v.print();
+  
   var l: float = v.length();
   print(l);
 
