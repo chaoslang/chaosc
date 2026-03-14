@@ -1,6 +1,6 @@
 QuickStart:
 
 ```console
-  clang++ -o chaosc chaosc.cpp
+  make -B
   ./chaosc <source.ch> <output> <backend>
 ```

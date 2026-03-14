@@ -11,10 +11,8 @@ fn Vec3.length(self: Vec3): float {
 }
 
 fn Vec3.print(self: Vec3): void {
-  print("Printing Vec3");
-  print(self.x, self.y, self.z);
+  print("Printing Vec3", self.x, self.y, self.z);
 }
-
 
 fn main(): int {
   var v: Vec3;
@@ -24,17 +22,7 @@ fn main(): int {
   v.z = 3.0;
 
   v.print();
-  
-  var l: float = v.length();
-  print(l);
-
-  var i: int = 0;
-
-  while (i < 3) {
-    v.x = v.x + 1.0;
-    print(v.x);
-    i = i + 1;
-  }
+  print(v.length());
 
   return 0;
 }
