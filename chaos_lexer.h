@@ -54,6 +54,10 @@ typedef enum {
   TOK_DECLARE,
   TOK_ARRAY,
   TOK_VAR,
+  TOK_STRUCT,
+  TOK_ENUM,
+  TOK_TYPE,
+  TOK_CONST,
 
   TOK_UNKNOWN
 
@@ -167,6 +171,14 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
         chaos_lexer_emit(lx, src, TOK_DECLARE, start, lx->pos, line, column);
       } else if (text == "var") {
         chaos_lexer_emit(lx, src, TOK_VAR, start, lx->pos, line, column);
+      } else if (text == "struct") {
+        chaos_lexer_emit(lx, src, TOK_STRUCT, start, lx->pos, line, column);
+      } else if (text == "const") {
+        chaos_lexer_emit(lx, src, TOK_CONST, start, lx->pos, line, column);
+      } else if (text == "enum") {
+        chaos_lexer_emit(lx, src, TOK_ENUM, start, lx->pos, line, column);
+      } else if (text == "type") {
+        chaos_lexer_emit(lx, src, TOK_TYPE, start, lx->pos, line, column);
       } else {
         chaos_lexer_emit(lx, src, TOK_IDENT, start, lx->pos, line, column);
       }

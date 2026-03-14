@@ -109,13 +109,23 @@ private:
       break;
 
     case IR_STORE:
-      output << indent() << inst.name << " = " << get_temp_name(inst.a)
-             << ";\n";
+      if (!inst.name.empty()) {
+        output << indent() << inst.name << " = " << get_temp_name(inst.a)
+               << ";\n";
+      } else {
+        output << indent() << "__mem[" << get_temp_name(inst.a)
+               << "] = " << get_temp_name(inst.b) << ";\n";
+      }
       break;
 
     case IR_LOAD:
-      output << indent() << "let " << get_temp_name(inst.dst) << " = "
-             << inst.name << ";\n";
+      if (!inst.name.empty()) {
+        output << indent() << "let " << get_temp_name(inst.dst) << " = "
+               << inst.name << ";\n";
+      } else {
+        output << indent() << "let " << get_temp_name(inst.dst) << " = (__mem["
+               << get_temp_name(inst.a) << "] ?? 0);\n";
+      }
       break;
 
     default:
@@ -213,6 +223,8 @@ private:
 
 public:
   void codegen(const IR_Program &ir) {
+    output << "const __mem = Object.create(null);\n";
+    output << "let __heap = 0;\n\n";
     for (const auto &fn : ir.functions) {
       output << "function " << fn.name << "(";
 
@@ -227,6 +239,13 @@ public:
 
       for (const auto &local : fn.locals)
         output << indent() << "let " << local.name << ";\n";
+
+      for (const auto &local : fn.locals) {
+        if (local.type.kind == IR_PTR && local.stack_bytes > 0) {
+          output << indent() << local.name << " = __heap;\n";
+          output << indent() << "__heap += " << local.stack_bytes << ";\n";
+        }
+      }
 
       emit_instructions_with_control_flow(fn.code);
 

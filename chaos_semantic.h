@@ -45,11 +45,16 @@ struct Struct_Data {
   std::vector<Struct_Field> fields;
 };
 
+struct Enum_Data {
+  std::string name;
+  std::vector<std::string> values;
+};
+
 struct Void_Data {};
 
 using Type_Data =
     std::variant<Void_Data, Chaos_Primitive_Type, Array_Data, Function_Data,
-                 std::shared_ptr<Chaos_Type>, Struct_Data>;
+                 std::shared_ptr<Chaos_Type>, Struct_Data, Enum_Data>;
 
 typedef struct Chaos_Type {
   enum {
@@ -58,6 +63,7 @@ typedef struct Chaos_Type {
     TYPE_FUNCTION,
     TYPE_POINTER,
     TYPE_STRUCT,
+    TYPE_ENUM,
     TYPE_VOID
   } kind;
 
@@ -102,6 +108,22 @@ typedef struct Chaos_Type {
     return t;
   }
 
+  static std::shared_ptr<Chaos_Type>
+  make_struct(std::string name, std::vector<Struct_Field> fields) {
+    auto t = std::make_shared<Chaos_Type>();
+    t->kind = TYPE_STRUCT;
+    t->data = Struct_Data{std::move(name), std::move(fields)};
+    return t;
+  }
+
+  static std::shared_ptr<Chaos_Type>
+  make_enum(std::string name, std::vector<std::string> values) {
+    auto t = std::make_shared<Chaos_Type>();
+    t->kind = TYPE_ENUM;
+    t->data = Enum_Data{std::move(name), std::move(values)};
+    return t;
+  }
+
   Chaos_Primitive_Type &primitive() {
     return std::get<Chaos_Primitive_Type>(data);
   }
@@ -126,6 +148,9 @@ typedef struct Chaos_Type {
 
   Struct_Data &structure() { return std::get<Struct_Data>(data); }
   const Struct_Data &structure() const { return std::get<Struct_Data>(data); }
+
+  Enum_Data &enumeration() { return std::get<Enum_Data>(data); }
+  const Enum_Data &enumeration() const { return std::get<Enum_Data>(data); }
 
   bool is_primitive() const { return kind == TYPE_PRIMITIVE; }
   bool is_array() const { return kind == TYPE_ARRAY; }
@@ -181,7 +206,45 @@ typedef struct Chaos_Type {
     return std::visit(std::forward<Visitor>(v), data);
   }
 
-  size_t size_bytes() const { assert(0 && "NOT IMPLEMENTED"); }
+  size_t size_bytes() const {
+    switch (kind) {
+    case TYPE_PRIMITIVE:
+      switch (primitive()) {
+      case PRIM_I8:
+        return 1;
+      case PRIM_I16:
+        return 2;
+      case PRIM_I32:
+        return 4;
+      case PRIM_I64:
+        return 8;
+      case PRIM_F32:
+        return 4;
+      case PRIM_F64:
+        return 8;
+      case PRIM_BOOL:
+        return 1;
+      default:
+        return 0;
+      }
+
+    case TYPE_POINTER:
+      return 8;
+
+    case TYPE_ARRAY:
+      return array().size * array().element->size_bytes();
+
+    case TYPE_STRUCT: {
+      size_t size = 0;
+      for (auto &f : structure().fields)
+        size += f.type->size_bytes();
+      return size;
+    }
+
+    default:
+      return 0;
+    }
+  }
 } Chaos_Type;
 
 typedef enum {
@@ -189,6 +252,7 @@ typedef enum {
   SYM_CONSTANT,
   SYM_FUNCTION,
   SYM_PARAMETER,
+  SYM_TYPE,
 } Chaos_Symbol_Kind;
 
 typedef struct Chaos_Symbol {
@@ -278,6 +342,7 @@ struct IR_Inst {
 struct IR_Local {
   std::string name;
   IR_Type type;
+  size_t stack_bytes = 0;
 };
 
 struct IR_Function {

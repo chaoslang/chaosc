@@ -21,8 +21,11 @@ typedef enum {
   AST_WHILE,
   AST_RETURN,
   AST_FUNCTION,
+  AST_STRUCT,
+  AST_ENUM,
   AST_IDENT,
   AST_ASIGN,
+  AST_MEMBER,
 
   AST_PROGRAM
 } Chaos_AST_Kind;
@@ -54,6 +57,11 @@ typedef struct Chaos_AST {
   } block;
 
   struct {
+    Chaos_AST *object;
+    std::string_view field;
+  } member;
+
+  struct {
     Chaos_AST *cond;
     Chaos_AST *then_br;
     Chaos_AST *else_br;
@@ -67,6 +75,7 @@ typedef struct Chaos_AST {
   struct {
     std::string_view name;
     std::vector<std::pair<std::string_view, std::string_view>> params;
+    std::string_view owner; // owner struct for methods
     std::string_view return_type;
     Chaos_AST *body;
   } function;
@@ -87,14 +96,29 @@ typedef struct Chaos_AST {
     Chaos_AST *value;
   } assign;
 
+  struct {
+    std::string_view name;
+    std::vector<std::pair<std::string_view, std::string_view>> fields;
+  } struct_decl;
+
+  struct {
+    std::string_view name;
+    std::vector<std::string_view> items;
+  } enum_decl;
+
   Chaos_AST()
       : kind(AST_PROGRAM), literal(), ident(),
         binary{TOK_INT, nullptr, nullptr}, unary{TOK_INT, nullptr}, block(),
         if_stmt{nullptr, nullptr, nullptr}, while_stmt{nullptr, nullptr},
-        function{std::string_view{}, {}, std::string_view{}, nullptr},
+        function{std::string_view{},
+                 {},
+                 std::string_view{},
+                 std::string_view{},
+                 nullptr},
         call{nullptr, {}},
         var_decl{std::string_view{}, std::string_view{}, nullptr},
-        assign{nullptr, nullptr}
+        assign{nullptr, nullptr}, enum_decl{std::string_view{}, {}},
+        struct_decl{std::string_view{}, {}}, member{nullptr, std::string_view{}}
 
   {}
 } Chaos_AST;
@@ -185,13 +209,11 @@ Chaos_AST *parse_var_decl(Chaos_Parser *p) {
 
   std::string_view type = p->advance()->text;
 
-  if (!p->match(TOK_EQUAL)) {
-    std::fprintf(stderr, "Expected '=' in variable declaration\n");
-    return nullptr;
+  Chaos_AST *init = nullptr;
+
+  if (p->match(TOK_EQUAL)) {
+    init = parse_expression(p);
   }
-
-  Chaos_AST *init = parse_expression(p);
-
   if (!p->match(TOK_SEMI)) {
     std::fprintf(stderr, "Expected ';' after variable declaration\n");
   }
@@ -208,24 +230,47 @@ Chaos_AST *parse_var_decl(Chaos_Parser *p) {
 Chaos_AST *parse_postfix(Chaos_Parser *p, Chaos_AST *left) {
   if (!left)
     return nullptr;
-  while (p->peek()->kind == TOK_LPAREN) {
-    p->advance();
-    Chaos_AST *call_node = new Chaos_AST();
-    call_node->kind = AST_CALL;
-    call_node->call.caller = left;
 
-    if (p->peek()->kind != TOK_RPAREN) {
-      call_node->call.args.push_back(parse_expression(p));
-      while (p->match(TOK_COMMA)) {
+  while (true) {
+
+    if (p->peek()->kind == TOK_LPAREN) {
+      p->advance();
+
+      Chaos_AST *call_node = new Chaos_AST();
+      call_node->kind = AST_CALL;
+      call_node->call.caller = left;
+
+      if (p->peek()->kind != TOK_RPAREN) {
         call_node->call.args.push_back(parse_expression(p));
+        while (p->match(TOK_COMMA)) {
+          call_node->call.args.push_back(parse_expression(p));
+        }
       }
+
+      if (!p->match(TOK_RPAREN)) {
+        std::fprintf(stderr, "Expected ')' after function arguments\n");
+      }
+
+      left = call_node;
+      continue;
     }
 
-    if (!p->match(TOK_RPAREN)) {
-      std::fprintf(stderr, "Expected ')' after function arguments\n");
+    if (p->match(TOK_DOT)) {
+      if (p->peek()->kind != TOK_IDENT) {
+        std::fprintf(stderr, "Expected field name after '.'\n");
+        return left;
+      }
+
+      Chaos_AST *node = new Chaos_AST();
+      node->kind = AST_MEMBER;
+      node->member.object = left;
+      node->member.field = p->advance()->text;
+
+      left = node;
+      continue;
     }
 
-    left = call_node;
+    break;
   }
 
   return left;
@@ -442,6 +487,66 @@ Chaos_AST *parse_while(Chaos_Parser *p) {
   return node;
 }
 
+Chaos_AST *parse_struct(Chaos_Parser *p) {
+  if (!p->match(TOK_STRUCT)) {
+    std::fprintf(stderr, "Expected: 'fn'\n");
+    return nullptr;
+  }
+  if (p->peek()->kind != TOK_IDENT) {
+    std::fprintf(stderr, "Expected struct name\n");
+    return nullptr;
+  }
+  std::string_view name = p->advance()->text;
+
+  if (!p->match(TOK_EQUAL)) {
+    std::fprintf(stderr, "Expected: '=' after struct name\n");
+    return nullptr;
+  }
+
+  if (!p->match(TOK_LCURLY)) {
+    std::fprintf(stderr, "Expected: '{' after struct name\n");
+    return nullptr;
+  }
+
+  std::vector<std::pair<std::string_view, std::string_view>> fields;
+
+  while (p->peek()->kind != TOK_RCURLY && p->peek()->kind != TOK_EOF) {
+    if (p->peek()->kind != TOK_IDENT) {
+      std::fprintf(stderr, "Expected field name\n");
+      return nullptr;
+    }
+    std::string_view field_name = p->advance()->text;
+
+    if (!p->match(TOK_COLON)) {
+      std::fprintf(stderr, "Expected ':' after field name\n");
+      return nullptr;
+    }
+
+    if (p->peek()->kind != TOK_IDENT) {
+      std::fprintf(stderr, "Expected field type\n");
+      return nullptr;
+    }
+
+    std::string_view field_type = p->advance()->text;
+
+    fields.push_back({field_name, field_type});
+
+    if (!p->match(TOK_COMMA))
+      break;
+  }
+
+  if (!p->match(TOK_RCURLY)) {
+    std::fprintf(stderr, "Expected '}' after struct\n");
+  }
+
+  Chaos_AST *node = new Chaos_AST();
+  node->kind = AST_STRUCT;
+  node->struct_decl.name = name;
+  node->struct_decl.fields = std::move(fields);
+
+  return node;
+}
+
 Chaos_AST *parse_function(Chaos_Parser *p) {
   if (!p->match(TOK_FN)) {
     std::fprintf(stderr, "Expected: 'fn'\n");
@@ -452,6 +557,19 @@ Chaos_AST *parse_function(Chaos_Parser *p) {
     return nullptr;
   }
   Chaos_Token *name_tok = p->advance();
+
+  std::string_view owner_name;
+  std::string_view fn_name = name_tok->text;
+
+  if (p->match(TOK_DOT)) {
+    owner_name = name_tok->text;
+    if (p->peek()->kind != TOK_IDENT) {
+      std::fprintf(stderr, "Expected method name after '.'\n");
+      return nullptr;
+    }
+    fn_name = p->advance()->text;
+  }
+
   if (!p->match(TOK_LPAREN)) {
     std::fprintf(stderr, "Expected: '('\n");
     return nullptr;
@@ -508,10 +626,58 @@ Chaos_AST *parse_function(Chaos_Parser *p) {
 
   Chaos_AST *node = new Chaos_AST();
   node->kind = AST_FUNCTION;
-  node->function.name = name_tok->text;
+  node->function.owner = owner_name;
+  node->function.name = fn_name;
   node->function.params = std::move(params);
   node->function.return_type = return_type;
   node->function.body = body;
+
+  return node;
+}
+
+Chaos_AST *parse_enum(Chaos_Parser *p) {
+  if (!p->match(TOK_ENUM))
+    return nullptr;
+
+  if (p->peek()->kind != TOK_IDENT) {
+    std::fprintf(stderr, "Expected enum name\n");
+    return nullptr;
+  }
+
+  std::string_view name = p->advance()->text;
+
+  if (!p->match(TOK_EQUAL)) {
+    std::fprintf(stderr, "Expected '=' after enum name\n");
+    return nullptr;
+  }
+
+  if (!p->match(TOK_LCURLY)) {
+    std::fprintf(stderr, "Expected '{' after enum name\n");
+    return nullptr;
+  }
+
+  std::vector<std::string_view> values;
+
+  while (p->peek()->kind != TOK_RCURLY && p->peek()->kind != TOK_EOF) {
+    if (p->peek()->kind != TOK_IDENT) {
+      std::fprintf(stderr, "Expected enum value\n");
+      return nullptr;
+    }
+
+    values.push_back(p->advance()->text);
+
+    if (!p->match(TOK_COMMA))
+      break;
+  }
+
+  if (!p->match(TOK_RCURLY)) {
+    std::fprintf(stderr, "Expected '}' after enum\n");
+  }
+
+  Chaos_AST *node = new Chaos_AST();
+  node->kind = AST_ENUM;
+  node->enum_decl.name = name;
+  node->enum_decl.items = std::move(values);
 
   return node;
 }
@@ -527,6 +693,10 @@ Chaos_AST *parse_statement(Chaos_Parser *p) {
     return parse_return(p);
   if (p->peek()->kind == TOK_VAR)
     return parse_var_decl(p);
+  if (p->peek()->kind == TOK_STRUCT)
+    return parse_struct(p);
+  if (p->peek()->kind == TOK_ENUM)
+    return parse_enum(p);
 
   Chaos_AST *expr = parse_expression(p);
 

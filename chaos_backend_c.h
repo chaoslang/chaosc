@@ -4,6 +4,15 @@
 #include <sstream>
 #include <unordered_map>
 
+static std::string mangle_symbol_name_c(const std::string &name) {
+  std::string out = name;
+  for (char &c : out) {
+    if (c == '.')
+      c = "_"[0];
+  }
+  return out;
+}
+
 static std::string escape_c_string(const std::string &s) {
   std::string out;
   out.reserve(s.size());
@@ -183,14 +192,14 @@ private:
       break;
 
     case IR_CALL: {
-      if (inst.dst != IR_VOID) {
+      if (inst.type.kind != IR_VOID) {
         output << indent() << lower_type_c(inst.type) << ' '
                << get_temp_name(inst.dst) << " = ";
       } else {
         output << indent();
       }
 
-      output << inst.name << "(";
+      output << mangle_symbol_name_c(inst.name) << "(";
       for (size_t i = 0; i < inst.args.size(); i++) {
         output << get_temp_name(inst.args[i]);
         if (i + 1 < inst.args.size())
@@ -227,13 +236,25 @@ private:
       break;
 
     case IR_STORE:
-      output << indent() << inst.name << " = " << get_temp_name(inst.a)
-             << ";\n";
+      if (!inst.name.empty()) {
+        output << indent() << inst.name << " = " << get_temp_name(inst.a)
+               << ";\n";
+      } else {
+        output << indent() << "*(" << lower_type_c(inst.type)
+               << " *)((char *)(intptr_t)" << get_temp_name(inst.a)
+               << ") = " << get_temp_name(inst.b) << ";\n";
+      }
       break;
 
     case IR_LOAD:
-      output << indent() << lower_type_c(inst.type) << ' '
-             << get_temp_name(inst.dst) << " = " << inst.name << ";\n";
+      if (!inst.name.empty()) {
+        output << indent() << lower_type_c(inst.type) << ' '
+               << get_temp_name(inst.dst) << " = " << inst.name << ";\n";
+      } else {
+        output << indent() << lower_type_c(inst.type) << ' '
+               << get_temp_name(inst.dst) << " = *(" << lower_type_c(inst.type)
+               << " *)((char *)(intptr_t)" << get_temp_name(inst.a) << ");\n";
+      }
       break;
 
     default:
@@ -279,11 +300,12 @@ public:
     output << indent() << "#include <stdint.h>\n";
     output << indent() << "#include <stdbool.h>\n";
     output << indent() << "#include <stddef.h>\n";
-    output << indent() << "typedef struct { size_t len; const char *data; } ChaosString;\n";
+    output << indent()
+           << "typedef struct { size_t len; const char *data; } ChaosString;\n";
 
     for (const auto &fn : ir.functions) {
-      output << lower_type_c(fn.return_type) << ' ' << fn.name << "(";
-
+      output << lower_type_c(fn.return_type) << ' '
+             << mangle_symbol_name_c(fn.name) << "(";
       for (size_t i = 0; i < fn.params.size(); i++) {
         output << lower_type_c(fn.params[i].type) << ' ' << fn.params[i].name;
         if (i + 1 < fn.params.size())
@@ -293,9 +315,17 @@ public:
       output << ") {\n";
       indent_level++;
 
-      for (const auto &local : fn.locals)
-        output << indent() << lower_type_c(local.type) << ' ' << local.name
-               << ";\n";
+      for (const auto &local : fn.locals) {
+        if (local.type.kind == IR_PTR && local.stack_bytes > 0) {
+          output << indent() << "unsigned char " << local.name << "_storage["
+                 << local.stack_bytes << "] = {0};\n";
+          output << indent() << lower_type_c(local.type) << ' ' << local.name
+                 << " = (intptr_t)" << local.name << "_storage;\n";
+        } else {
+          output << indent() << lower_type_c(local.type) << ' ' << local.name
+                 << ";\n";
+        }
+      }
       emit_instructions_with_control_flow(fn.code);
 
       indent_level--;
