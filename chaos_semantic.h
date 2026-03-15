@@ -241,6 +241,9 @@ typedef struct Chaos_Type {
     case TYPE_ARRAY:
       return array().size * array().element->size_bytes();
 
+    case TYPE_STRING:
+      return sizeof(size_t) + sizeof(const char *);
+
     case TYPE_STRUCT: {
       size_t size = 0;
       for (auto &f : structure().fields)
